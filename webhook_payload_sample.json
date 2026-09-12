@@ -1,0 +1,62 @@
+[
+  {
+    "channel": "#market-telemetry",
+    "username": "DeltaGuard Engine",
+    "embeds": [
+      {
+        "title": "[HIGH] PRICE_DROP Detected",
+        "color": 16096779,
+        "fields": [
+          {
+            "name": "Item",
+            "value": "Core Crewneck - Black",
+            "inline": true
+          },
+          {
+            "name": "SKU",
+            "value": "`CRW-BLK-M`",
+            "inline": true
+          },
+          {
+            "name": "Price Shift",
+            "value": "$95.0 \u2192 **$85.0** (-10.53%)",
+            "inline": false
+          }
+        ],
+        "footer": {
+          "text": "Telemetry Sync \u2022 2026-09-12T10:23:27.504038"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "#market-telemetry",
+    "username": "DeltaGuard Engine",
+    "embeds": [
+      {
+        "title": "[CRITICAL] STOCKOUT Detected",
+        "color": 14689316,
+        "fields": [
+          {
+            "name": "Item",
+            "value": "Denim Trouser - Raw",
+            "inline": true
+          },
+          {
+            "name": "SKU",
+            "value": "`DNM-RAW-32`",
+            "inline": true
+          },
+          {
+            "name": "Inventory Event",
+            "value": "Status transitioned to **OUT_OF_STOCK**",
+            "inline": false
+          }
+        ],
+        "footer": {
+          "text": "Telemetry Sync \u2022 2026-09-12T10:23:27.504468"
+        }
+      }
+    ]
+  }
+]

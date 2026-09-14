@@ -1,12 +1,17 @@
-# E-Commerce Telemetry & Anomaly Webhook Dispatcher
+# E-Commerce Telemetry Alerts
 
-Production-grade alerting module engineered in **Python** for real-time e-commerce intelligence. Consumes inventory delta streams and formats structured, rich JSON webhook payloads for automated dispatch to Slack, Discord, or enterprise endpoints.
+Notification dispatch utility that translates catalog delta events into structured webhook payloads for team channels (Discord, Slack, or custom HTTP ingestion endpoints).
 
-## Core Architecture
-- **Multi-Event Classification:** Evaluates severity profiles for catastrophic stockouts (`CRITICAL`) and competitor pricing shifts (`HIGH`).
-- **Normalized Schema Payloads:** Constructs standardized embed objects containing variant SKUs, absolute price deltas, percentage variance, and UTC timestamps.
-- **Integration Agnostic:** Plugs directly into existing delta monitoring pipelines and SQLite audit warehouses.
+## Features
+- **Delta Event Aggregation:** Groups price modifications, stockouts, restocks, and additions into a summary payload.
+- **Webhook Integration:** Formats Discord/Slack embeds with status colors and event previews.
+- **CLI Ready:** Ingests delta result CSV files and runs headless.
 
-## Deliverables
-- `alert_dispatcher.py` - Core telemetry formatting and routing engine.
-- `webhook_payload_sample.json` - Sample formatted integration payload (untracked).
+## Usage
+
+```bash
+# Output formatted JSON payload to stdout
+python alert_dispatcher.py --input delta_results.csv
+
+# Dispatch to a live Discord/Slack webhook
+python alerts.py --input delta_results.csv --webhook "[https://discord.com/api/webhooks/your/url](https://discord.com/api/webhooks/your/url)"

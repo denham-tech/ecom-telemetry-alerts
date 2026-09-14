@@ -1,93 +1,113 @@
+"""
+E-Commerce Catalog Alerting & Webhook Dispatcher
+Parses detected catalog delta events and posts formatted alert payloads
+to external monitoring webhooks (Discord / Slack / generic HTTP receivers).
+"""
+
+import argparse
 import json
-import sqlite3
-from datetime import datetime
+import logging
+import sys
+from pathlib import Path
+from typing import Dict, Any, List
 import pandas as pd
+import requests
 
-class AnomalyAlertDispatcher:
-    def __init__(self, db_path: str = "delta_warehouse.db"):
-        self.db_path = db_path
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("AlertEngine")
 
-    def fetch_unreported_anomalies(self, limit: int = 5) -> list:
+
+class CatalogAlertDispatcher:
+    def __init__(self, webhook_url: str = None):
+        self.webhook_url = webhook_url
+
+    def build_payload(self, delta_records: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Extracts recent price drops and stockouts for priority dispatch.
-        Simulates an ingestion query against historical delta tables.
+        Constructs a structured JSON alert payload from delta events.
         """
-        # Structured operational test payload
-        simulated_events = [
-            {
-                "event_type": "PRICE_DROP",
-                "severity": "HIGH",
-                "sku": "CRW-BLK-M",
-                "item": "Core Crewneck - Black",
-                "previous_price": 95.0,
-                "current_price": 85.0,
-                "variance_pct": -10.53,
-                "timestamp": datetime.utcnow().isoformat()
-            },
-            {
-                "event_type": "STOCKOUT",
-                "severity": "CRITICAL",
-                "sku": "DNM-RAW-32",
-                "item": "Denim Trouser - Raw",
-                "previous_state": "IN_STOCK",
-                "current_state": "OUT_OF_STOCK",
-                "timestamp": datetime.utcnow().isoformat()
-            }
+        summary = {
+            "total_events": len(delta_records),
+            "price_changes": sum(1 for r in delta_records if r.get("event_type") == "PRICE_CHANGE"),
+            "stockouts": sum(1 for r in delta_records if r.get("event_type") == "STOCKOUT"),
+            "restocks": sum(1 for r in delta_records if r.get("event_type") == "RESTOCK"),
+            "products_added": sum(1 for r in delta_records if r.get("event_type") == "PRODUCT_ADDED"),
+            "products_removed": sum(1 for r in delta_records if r.get("event_type") == "PRODUCT_REMOVED"),
+        }
+
+        # Format top 5 sample events for notification preview
+        preview = [
+            f"[{r.get('event_type')}] {r.get('title', 'Unknown')} - {r.get('detail', '')}"
+            for r in delta_records[:5]
         ]
-        return simulated_events
 
-    def format_webhook_payload(self, event: dict) -> dict:
-        """
-        Constructs a structured, production-standard JSON webhook card.
-        Compatible with Slack, Discord, or enterprise CRM webhook endpoints.
-        """
-        color = 0xE02424 if event["severity"] == "CRITICAL" else 0xF59E0B
-        
         payload = {
-            "channel": "#market-telemetry",
-            "username": "DeltaGuard Engine",
+            "content": f"🚨 **Catalog Telemetry Alert**: {summary['total_events']} state transitions detected.",
             "embeds": [
                 {
-                    "title": f"[{event['severity']}] {event['event_type']} Detected",
-                    "color": color,
+                    "title": "Catalog Delta Summary",
+                    "color": 15158332 if summary["stockouts"] > 0 else 3066993,
                     "fields": [
-                        {"name": "Item", "value": event["item"], "inline": True},
-                        {"name": "SKU", "value": f"`{event['sku']}`", "inline": True},
+                        {"name": "Price Changes", "value": str(summary["price_changes"]), "inline": True},
+                        {"name": "Stockouts", "value": str(summary["stockouts"]), "inline": True},
+                        {"name": "Restocks", "value": str(summary["restocks"]), "inline": True},
+                        {"name": "New Products", "value": str(summary["products_added"]), "inline": True},
+                        {"name": "Delisted Products", "value": str(summary["products_removed"]), "inline": True},
                     ],
-                    "footer": {"text": f"Telemetry Sync • {event['timestamp']}"}
+                    "description": "**Event Previews:**\n" + "\n".join(preview) if preview else "No events."
                 }
             ]
         }
-
-        if event["event_type"] == "PRICE_DROP":
-            payload["embeds"][0]["fields"].append(
-                {"name": "Price Shift", "value": f"${event['previous_price']} → **${event['current_price']}** ({event['variance_pct']}%)", "inline": False}
-            )
-        elif event["event_type"] == "STOCKOUT":
-            payload["embeds"][0]["fields"].append(
-                {"name": "Inventory Event", "value": "Status transitioned to **OUT_OF_STOCK**", "inline": False}
-            )
-
         return payload
 
-    def dispatch_simulation(self):
-        """
-        Validates pipeline formatting and generates client-facing JSON deliverable.
-        """
-        events = self.fetch_unreported_anomalies()
-        dispatched_logs = []
+    def dispatch(self, payload: Dict[str, Any]) -> bool:
+        if not self.webhook_url:
+            logger.warning("No webhook URL configured. Outputting payload to stdout.")
+            print(json.dumps(payload, indent=2))
+            return True
 
-        for ev in events:
-            card = self.format_webhook_payload(ev)
-            dispatched_logs.append(card)
-            print(f"[✓] Formatted {ev['severity']} alert for SKU: {ev['sku']}")
+        try:
+            response = requests.post(
+                self.webhook_url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=10
+            )
+            response.raise_for_status()
+            logger.info("Webhook payload dispatched successfully.")
+            return True
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to deliver webhook payload: {e}")
+            return False
 
-        # Persist output artifact
-        with open("webhook_payload_sample.json", "w") as f:
-            json.dump(dispatched_logs, f, indent=2)
 
-        print("[✓] Generated 'webhook_payload_sample.json' for integration audits.")
+def main():
+    parser = argparse.ArgumentParser(description="Dispatch notifications for catalog delta events.")
+    parser.add_argument("--input", "-i", required=True, help="Path to delta_results.csv")
+    parser.add_argument("--webhook", "-w", default=None, help="Target Discord/Slack/HTTP webhook URL")
+
+    args = parser.parse_args()
+    input_path = Path(args.input)
+
+    if not input_path.exists():
+        logger.error(f"Input file not found: {input_path}")
+        sys.exit(1)
+
+    df = pd.read_csv(input_path)
+    if df.empty:
+        logger.info("Delta input is empty. No notifications to send.")
+        sys.exit(0)
+
+    records = df.to_dict(orient="records")
+    dispatcher = CatalogAlertDispatcher(webhook_url=args.webhook)
+    payload = dispatcher.build_payload(records)
+    success = dispatcher.dispatch(payload)
+
+    sys.exit(0 if success else 1)
+
 
 if __name__ == "__main__":
-    dispatcher = AnomalyAlertDispatcher()
-    dispatcher.dispatch_simulation()
+    main()

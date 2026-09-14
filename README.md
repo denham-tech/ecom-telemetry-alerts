@@ -14,4 +14,4 @@ Notification dispatch utility that translates catalog delta events into structur
 python alert_dispatcher.py --input delta_results.csv
 
 # Dispatch to a live Discord/Slack webhook
-python alerts.py --input delta_results.csv --webhook "[https://discord.com/api/webhooks/your/url](https://discord.com/api/webhooks/your/url)"
+python alert_dispatcher.py --input delta_results.csv --webhook "[https://discord.com/api/webhooks/your/url](https://discord.com/api/webhooks/your/url)"
